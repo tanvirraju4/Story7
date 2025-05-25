@@ -1,0 +1,312 @@
+---
+title: 'Story 3: Do stricter gun laws reduce firearm gun deaths?'
+author: "Tanvir Raju"
+date: "2025-04-22"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(tidyverse)
+library(sf)
+library(ggthemes)
+library(viridis)
+library(readr)
+library(janitor)
+library(ggrepel)
+library(broom)
+library(usdata)
+```
+
+```{r}
+
+state_mapping <- tibble(
+  state = state.abb,
+  state_full = state.name
+)
+
+state_mapping <- bind_rows(state_mapping, tibble(state = "DC", state_full = "District of Columbia"))
+
+# Join and clean
+firearm_mortality <- read_csv("C:/Users/ElitBook/Documents/Dataset/Story3/firearm_mortality2022.csv") %>%
+  clean_names() %>%
+  filter(year == 2022) %>%
+  left_join(state_mapping, by = "state") %>%
+  mutate(region = tolower(state_full))
+
+us_states <- map_data("state") %>% as_tibble()
+
+map_data <- us_states %>%
+  left_join(firearm_mortality, by = "region")
+
+ggplot(map_data, aes(long, lat, group = group, fill = rate)) +
+  geom_polygon(color = "white") +
+  coord_fixed(1.3) +
+  scale_fill_viridis(option = "plasma", name = "Deaths per 100k") +
+  labs(
+    title = "Firearm Mortality Rate by State (2022)",
+    caption = "Source: CDC"
+  ) +
+  theme_void() +
+  theme(legend.position = "bottom")
+```
+```{r}
+library(readr)
+library(dplyr)
+library(tidyr)
+
+# Read the dataset
+gun_laws <- read_csv("C:/Users/ElitBook/Documents/Dataset/Story3/firearm_laws.csv")
+
+# Check the structure
+glimpse(gun_laws)
+
+# Summarize number of states that have each type of law
+gun_laws %>%
+  summarise(across(where(is.numeric), ~sum(.))) %>%
+  pivot_longer(cols = everything(), names_to = "law_type", values_to = "num_states") %>%
+  arrange(desc(num_states))
+
+
+```
+
+```{r}
+library(ggplot2)
+
+gun_laws %>%
+  summarise(across(where(is.numeric), ~sum(.))) %>%
+  pivot_longer(everything(), names_to = "law_type", values_to = "num_states") %>%
+  top_n(10, num_states) %>%
+  ggplot(aes(x = reorder(law_type, num_states), y = num_states)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Most Common Gun Law Types Across States",
+       x = "Law Type", y = "Number of States")
+
+```
+```{r}
+library(dplyr)
+library(cluster)
+
+# Print column names to verify structure
+print(colnames(gun_laws))
+
+# Select only numeric columns and drop rows with NAs
+law_matrix <- gun_laws %>% 
+  select(where(is.numeric)) %>% 
+  drop_na()
+
+# Run k-means clustering with 3 clusters
+set.seed(123)
+kmeans_result <- kmeans(law_matrix, centers = 3)
+
+# Add cluster label back to clean data
+gun_laws_clean <- gun_laws %>% 
+  filter(complete.cases(select(., where(is.numeric)))) %>% 
+  mutate(cluster = kmeans_result$cluster)
+
+# Check if 'state' column exists and print cluster assignments
+if("state" %in% colnames(gun_laws_clean)) {
+  gun_laws_clean %>% 
+    select(state, cluster) %>% 
+    arrange(cluster) %>% 
+    print()
+} else {
+  message("Column 'state' does not exist in the dataframe.")
+  print(head(gun_laws_clean))
+}
+
+
+
+
+```
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+library(janitor)
+library(readr)
+
+# Load and clean ownership data
+ownership <- read_csv("C:/Users/ElitBook/Documents/Dataset/Story3/gun-ownership-by-state.csv") %>% clean_names()
+firearm_mortality <- read_csv("C:/Users/ElitBook/Documents/Dataset/Story3/firearm_mortality2022.csv") %>% clean_names()
+
+
+glimpse(ownership)
+
+glimpse(firearm_mortality)
+
+```
+```{r}
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+library(janitor)
+library(readr)
+library(tibble)
+
+# Load and clean ownership data
+ownership <- read_csv("C:/Users/ElitBook/Documents/Dataset/Story3/gun-ownership-by-state.csv") %>% 
+  clean_names()
+
+# Load firearm mortality data
+firearm_mortality <- read_csv("C:/Users/ElitBook/Documents/Dataset/Story3/firearm_mortality2022.csv") %>%
+  clean_names()
+
+# Create state abbreviation to full name lookup (add DC manually)
+state_lookup <- tibble(
+  state_abb = c(state.abb, "DC"),
+  state_full = c(state.name, "District of Columbia")
+)
+
+# Join firearm mortality data with full state names
+firearm_mortality <- firearm_mortality %>%
+  left_join(state_lookup, by = c("state" = "state_abb")) %>%
+  mutate(state = state_full) %>%
+  select(-state_full)
+
+# Join ownership and firearm mortality data on full state name
+combined_ownership <- firearm_mortality %>%
+  left_join(ownership, by = "state")
+
+# Plot gun ownership percentage vs firearm mortality rate
+ggplot(combined_ownership, aes(x = gun_ownership_percentage, y = rate)) +
+  geom_point(color = "purple", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  geom_text_repel(aes(label = state), size = 3) +
+  labs(
+    title = "Gun Ownership vs Firearm Mortality",
+    x = "Gun Ownership Percentage (%)",
+    y = "Firearm Mortality Rate"
+  ) +
+  theme_minimal()
+
+
+```
+
+```{r}
+death_breakdown <- read_csv("C:/Users/ElitBook/Documents/Dataset/Story3/mortality_breakdown.csv") %>% clean_names()
+
+
+glimpse(death_breakdown)
+
+
+
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(janitor)
+library(readr)
+library(tidyr)  # for pivot_longer
+
+# Load and clean death breakdown data
+death_breakdown <- read_csv("C:/Users/ElitBook/Documents/Dataset/Story3/mortality_breakdown.csv") %>% clean_names()
+
+# Calculate the total death rate (suicide + homicide) for each state
+death_breakdown <- death_breakdown %>%
+  mutate(total_rate = suicide_rate + homicide_rate,
+         other_rate = 100 - total_rate)  # Assuming 100% total, calculate 'other' percent
+
+# Convert to long format for plotting
+breakdown_long <- death_breakdown %>%
+  pivot_longer(
+    cols = c(suicide_rate, homicide_rate, other_rate),
+    names_to = "type",
+    values_to = "percent"
+  ) %>%
+  mutate(type = recode(type,
+                       suicide_rate = "Suicide",
+                       homicide_rate = "Homicide",
+                       other_rate = "Other"))
+
+# Plot stacked bar chart (flip coordinates for readability)
+ggplot(breakdown_long, aes(x = reorder(state, -percent), y = percent, fill = type)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Composition of Firearm Deaths by Type",
+    x = "State",
+    y = "Percentage",
+    fill = "Type"
+  ) +
+  theme_minimal()
+
+```
+```{r}
+burglary <- read_csv("C:/Users/ElitBook/Documents/Dataset/Story3/burglary.csv") %>% clean_names()
+glimpse(burglary)
+
+```
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(janitor)
+
+# Read burglary data as CSV (comma-separated), clean column names
+burglary <- read_csv("C:/Users/ElitBook/Documents/Dataset/Story3/burglary.csv") %>%
+  clean_names()
+
+# Inspect raw 'state' column to see what's inside
+print("Original state column preview:")
+print(head(burglary$state))
+
+# Clean 'state' column by removing everything after first tab, space, or digit
+# This handles cases like "New Mexico\t602.8" or "Washington\t565"
+burglary <- burglary %>%
+  mutate(state = gsub("[\t\\s\\d].*$", "", state))
+
+# Check cleaned 'state' column
+print("Cleaned state column preview:")
+print(head(burglary$state))
+
+# Check data columns and preview
+print("Burglary dataset columns:")
+print(colnames(burglary))
+print(head(burglary))
+
+# Prepare firearm_mortality dataset: rename rate column, ensure state is character
+firearm_mortality <- firearm_mortality %>%
+  rename(firearm_mortality_rate = rate) %>%
+  mutate(state = as.character(state))
+
+# Inspect firearm_mortality data
+print("Firearm mortality dataset preview:")
+print(head(firearm_mortality))
+
+# Join burglary and firearm mortality datasets by 'state'
+combined_burglary <- firearm_mortality %>%
+  inner_join(burglary, by = "state")
+
+# Preview combined dataset
+print("Combined burglary and firearm mortality preview:")
+print(head(combined_burglary))
+
+# Plot burglary rate vs firearm mortality rate
+ggplot(combined_burglary, aes(x = burglary_100k, y = firearm_mortality_rate)) +
+  geom_point(color = "darkgreen") +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(
+    title = "Burglary Rate vs Firearm Mortality",
+    x = "Burglary Rate per 100k",
+    y = "Firearm Mortality Rate"
+  ) +
+  theme_minimal()
+
+
+
+```
+
+
